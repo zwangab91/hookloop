@@ -1,0 +1,11 @@
+__pycache__/
+*.egg-info/
+.env
+config.local.yaml
+output/
+demo_output/
+demo_state/
+.pytest_cache/
+# state/ is created by the daily workflow, which force-adds state/hookloop.db (rotation, hook library, encrypted tokens)
+.ruff_cache/
+state/

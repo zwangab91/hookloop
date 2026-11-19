@@ -1,0 +1,59 @@
+{
+  "submit_topic": {
+    "topic": "Claude Skills",
+    "hashtags": ["claudeskills", "claudeai", "claude", "aitools"],
+    "why_now": "Demo fixture: Skills let people stop re-pasting the same instructions, a recurring pain point in AI tutorials.",
+    "facts": [
+      {"fact": "A Claude skill is a folder containing a SKILL.md file with instructions, optionally plus scripts and resources.", "source_url": "https://docs.claude.com"},
+      {"fact": "SKILL.md starts with a name and a description; Claude uses the description to decide when to load the skill.", "source_url": "https://docs.claude.com"},
+      {"fact": "Only the short description sits in context until a request matches; the full skill loads on demand.", "source_url": "https://docs.claude.com"}
+    ]
+  },
+  "submit_hook_analysis": [
+    {
+      "opening_line": "You've been prompting this tool the hard way.",
+      "hook_type": "mistake_callout",
+      "structure": [
+        {"t": "0-1.5s", "beat": "Bold claim the viewer is doing it wrong, text overlay mirrors it"},
+        {"t": "1.5-4s", "beat": "Flash of the better result before explaining"},
+        {"t": "4-10s", "beat": "Step one shown on screen, fast cuts"}
+      ],
+      "visual_pattern": "Big high-contrast text card in the first frame, screen recording behind, captions word-by-word",
+      "on_screen_text": "YOU'RE DOING IT WRONG",
+      "template": "You're {doing common task} the hard way. Here's the {feature} that fixes it.",
+      "why_it_works": "Triggers mild loss aversion and promises a fast, concrete fix.",
+      "score": 8.5
+    },
+    {
+      "opening_line": "Here is the finished report. It took me nine seconds.",
+      "hook_type": "result_first",
+      "structure": [
+        {"t": "0-2s", "beat": "Show the end result immediately"},
+        {"t": "2-5s", "beat": "Name the surprising speed or ease"},
+        {"t": "5-10s", "beat": "Rewind: 'here's how'"}
+      ],
+      "visual_pattern": "Result on screen from frame one, zoom-in on the key detail",
+      "on_screen_text": "9 SECONDS",
+      "template": "This {impressive result} took me {tiny amount of time}. Here's how.",
+      "why_it_works": "Proof before promise; curiosity gap about the method.",
+      "score": 8.0
+    }
+  ],
+  "submit_script": {
+    "reference_hook_id": 1,
+    "hook_type": "contrarian",
+    "title": "Stop re-pasting prompts: Claude Skills in 40 seconds",
+    "hook_overlay": "Stop re-pasting prompts",
+    "segments": [
+      {"voiceover": "Stop pasting the same instructions into Claude every day.", "on_screen": "Stop re-pasting prompts", "style": "hook", "code": ""},
+      {"voiceover": "Turn them into a skill. A skill is just a folder with a file called SKILL dot M D.", "on_screen": "Skill = folder + SKILL.md", "style": "point", "code": ""},
+      {"voiceover": "At the top, a name and a one-line description. Below it, your steps.", "on_screen": "Name. Description. Steps.", "style": "code", "code": "---\nname: weekly-report\ndescription: Turn my notes\n  into our weekly report\n---\n1. Pull wins, risks, asks\n2. Use the team template\n3. Keep it under 200 words"},
+      {"voiceover": "Claude reads only that description until your request matches it. Then it loads the whole skill.", "on_screen": "Loads only when it's needed", "style": "point", "code": ""},
+      {"voiceover": "So you can keep dozens of skills without bloating a single chat.", "on_screen": "Dozens of skills. Zero bloat.", "style": "point", "code": ""},
+      {"voiceover": "Follow for a new Claude trick every day.", "on_screen": "New Claude trick every day", "style": "cta", "code": ""}
+    ],
+    "caption": "Write your instructions once, reuse them forever. Here's how Claude Skills load.",
+    "hashtags": ["claude", "claudeai", "aitools", "productivity"]
+  },
+  "submit_review": {"pass": true, "issues": []}
+}

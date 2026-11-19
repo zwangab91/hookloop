@@ -1,0 +1,5 @@
+[
+  {"platform": "tiktok", "video_id": "demo-001", "url": "https://example.com/synthetic/tiktok/demo-001", "views": 2400000, "likes": 310000, "caption": "SYNTHETIC DEMO ROW - stop prompting AI the hard way #claude #aitools", "author": "example_creator_a", "duration_s": 38, "posted_at": "", "media_url": ""},
+  {"platform": "instagram", "video_id": "demo-002", "url": "https://example.com/synthetic/instagram/demo-002", "views": 1300000, "likes": 98000, "caption": "SYNTHETIC DEMO ROW - this report took 9 seconds #claudeai", "author": "example_creator_b", "duration_s": 29, "posted_at": "", "media_url": ""},
+  {"platform": "youtube", "video_id": "demo-003", "url": "https://example.com/synthetic/youtube/demo-003", "views": 640000, "likes": 21000, "caption": "SYNTHETIC DEMO ROW - below the 1M bar, should be filtered out", "author": "example_creator_c", "duration_s": 44, "posted_at": "", "media_url": ""}
+]

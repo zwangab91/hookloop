@@ -1,0 +1,59 @@
+# hookloop config: edit `handle` before going live. Secrets never go here (GitHub Actions secrets / .env).
+# Secrets never go here; they come from environment variables (see .env.example).
+
+niche: Claude                 # Step 1: the hot topic your channel is about
+handle: "@yourhandle"         # shown on every video + the end card
+
+topics:
+  pool:                       # Step 6: rotated daily, never repeated inside rotation_days (refreshed 2026-11-19)
+    - Claude Code Code Mode
+    - Claude Fable 5.2
+    - Claude Skills
+    - Claude connectors (MCP)
+    - Claude Cowork
+    - Claude Design
+    - Claude Code Routines
+    - Claude in Excel and PowerPoint
+    - Weekend builds with Claude
+    - CLAUDE.md tips
+  discover_trending: true     # Claude web-searches what's hot today and may pick a new subtopic
+  rotation_days: 7
+
+research:
+  platforms: [tiktok, instagram, youtube]   # Step 2: where to search the hashtags
+  min_views: 1000000                        # Step 3: only learn from 1M+ view videos
+  max_age_days: 120
+  analyze_top: 6                            # winners to "watch" per day
+  hook_seconds: 10                          # Step 4: study the first 10 seconds
+  transcriber: openai                       # openai | local | none
+
+llm:
+  model: claude-sonnet-5-5
+  fast_model: claude-haiku-5-5              # used for the critic pass
+
+script:
+  max_seconds: 45                           # Step 5: hard cap, enforced after TTS
+  cta: "Follow for a new Claude trick every day."
+  persona: >-
+    A practical builder who shows one concrete, copyable Claude trick per video.
+    Plain words, no hype, no filler, talks like a friend at a desk.
+
+tts:
+  provider: kokoro                          # kokoro (free/local) | openai | elevenlabs (your cloned voice)
+  kokoro: {voice: am_michael, speed: 1.05}
+  # elevenlabs: {voice_id: "YOUR_VOICE_ID", model_id: eleven_multilingual_v2}
+
+render:
+  music: ""                                 # optional path to a royalty-free loop
+  theme: {accent: "#FF7A45", highlight: "#FFD54A"}
+
+publish:
+  mode: auto                                # auto = post immediately | review = wait for `hookloop approve <id>`
+  platforms:
+    tiktok:    {enabled: true, method: direct, privacy: PUBLIC_TO_EVERYONE}   # method: inbox = drafts, 1 tap to post
+    instagram: {enabled: true, share_to_feed: true}
+    youtube:   {enabled: true, privacy: public}
+    webhook:   {enabled: false}             # fan out to X/LinkedIn/Threads via n8n or Make
+
+growth:
+  monetize_at_followers: 10000              # Step 7: notify + write a media kit when crossed

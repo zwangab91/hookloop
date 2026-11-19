@@ -1,0 +1,113 @@
+name: hookloop daily
+
+on:
+  schedule:
+    - cron: "17 16 * * *"   # 08:17 PST / 09:17 PDT — adjust to your audience's peak
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render but don't publish"
+        type: boolean
+        default: false
+      approve:
+        description: "Publish a pending post id (review mode)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write            # to commit state/hookloop.db back (rotation, hook library, rotated tokens)
+
+concurrency:
+  group: hookloop
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.keys.outputs.ready }}
+    steps:
+      - id: keys
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::ANTHROPIC_API_KEY secret not set yet; skipping the daily run."; echo "ready=false" >> "$GITHUB_OUTPUT"; fi
+
+  run:
+    needs: check
+    if: needs.check.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      HOOKLOOP_STATE_KEY: ${{ secrets.HOOKLOOP_STATE_KEY }}   # encrypts rotated OAuth tokens in the committed DB
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+      TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+      TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      HOOKLOOP_WEBHOOK_URL: ${{ secrets.HOOKLOOP_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: System packages
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-inter fonts-dejavu-core espeak-ng
+
+      - name: Install hookloop
+        run: pip install -e ".[kokoro]"
+
+      - name: Cache voice model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hookloop
+          key: kokoro-v1.0
+
+      - name: Publish an approved post
+        if: ${{ github.event.inputs.approve != '' }}
+        run: hookloop -c config.yaml approve "${{ github.event.inputs.approve }}"
+
+      - name: Daily loop
+        if: ${{ github.event.inputs.approve == '' }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            hookloop -c config.yaml run --dry-run
+          else
+            hookloop -c config.yaml run
+          fi
+
+      - name: Upload video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hookloop-${{ github.run_id }}
+          path: |
+            output/**/video.mp4
+            output/**/cover.jpg
+            output/**/script.json
+            output/**/summary.json
+            output/media_kit.md
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Persist state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f state/hookloop.db || true
+          git diff --cached --quiet || git commit -m "hookloop state $(date -u +%F)"
+          git push || echo "nothing to push"
