@@ -175,7 +175,7 @@ def test_placeholder_handle_blocks_publishing(cfg, tmp_path, monkeypatch):
 
     cfg["state_dir"], cfg["output_dir"] = str(tmp_path / "s"), str(tmp_path / "o")
     monkeypatch.setattr(pipeline, "make_publishers", lambda c, s: {"tiktok": Pub()})
-    monkeypatch.setattr(pipeline, "LLM", lambda c: pipeline.load_fake(pipeline.FIXTURES / "demo_llm.json"))
+    monkeypatch.setattr(pipeline, "make_llm", lambda c: pipeline.load_fake(pipeline.FIXTURES / "demo_llm.json"))
     monkeypatch.setattr(pipeline, "research", lambda c, s, t, fixture=None: [])
     monkeypatch.setattr(pipeline, "render_with_fit", lambda s, c, t, d: (d.mkdir(parents=True, exist_ok=True), {"video": str(d / "v.mp4"), "duration": 30.0})[1])
     monkeypatch.setattr(pipeline, "make_tts", lambda c: None)

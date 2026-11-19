@@ -1,7 +1,11 @@
-"""Thin Claude wrapper that always returns structured JSON via a forced tool call.
+"""Claude backends. Every backend exposes `structured(...) -> dict` (schema-shaped JSON).
 
-`structured()` optionally enables Claude's server-side web search first (for "what is hot
-right now" and fact-checking), then requires the answer through the submit tool.
+LLM        Claude API via the anthropic SDK (ANTHROPIC_API_KEY, pay-per-token).
+ClaudeCLI  The official Claude Code CLI in headless mode (`claude -p --json-schema`), so the
+           agent runs on your Claude subscription: CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`
+           (or a local `claude` login). Anthropic only allows subscription logins through its own
+           apps, which is why this backend shells out to `claude` instead of reusing the token.
+make_llm() picks one based on llm.backend (auto | api | claude-cli).
 """
 from __future__ import annotations
 
@@ -9,8 +13,12 @@ import base64
 import copy
 import json
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 log = logging.getLogger("hookloop.llm")
 
@@ -73,6 +81,93 @@ class LLM:
             messages.append({"role": "user", "content": f"Call `{tool_name}` now with your final answer."})
             tool_choice = {"type": "tool", "name": tool_name}
         raise RuntimeError(f"model never called {tool_name}")
+
+
+class ClaudeCLI:
+    """Runs each structured call as one `claude -p` invocation with --json-schema."""
+
+    def __init__(self, cfg: dict[str, Any], *, binary: str | None = None,
+                 runner: Callable[..., subprocess.CompletedProcess] = subprocess.run):
+        self.bin = binary or shutil.which("claude")
+        if not self.bin:
+            raise RuntimeError("Claude Code CLI (`claude`) not found; install it with "
+                               "`npm install -g @anthropic-ai/claude-code`")
+        lc = cfg["llm"]
+        self.model, self.fast_model = lc["model"], lc["fast_model"]
+        self.web_enabled = bool(lc["web_search"])
+        self.max_searches = int(lc["max_searches"])
+        self.timeout = int(lc.get("cli_timeout_s", 900))
+        self.runner = runner
+
+    def structured(
+        self,
+        *,
+        system: str,
+        content: str | list[dict[str, Any]],
+        tool_name: str,
+        schema: dict[str, Any],
+        description: str = "",
+        fast: bool = False,
+        web_search: bool = False,
+        max_tokens: int = 4096,
+    ) -> dict[str, Any]:
+        blocks = [{"type": "text", "text": content}] if isinstance(content, str) else content
+        with tempfile.TemporaryDirectory(prefix="hookloop_cli_") as td:
+            texts, images = [], []
+            for i, b in enumerate(blocks):
+                if b.get("type") == "text":
+                    texts.append(b["text"])
+                elif b.get("type") == "image":
+                    ext = b["source"].get("media_type", "image/jpeg").split("/")[-1]
+                    img = Path(td) / f"image_{i:02d}.{ext}"
+                    img.write_bytes(base64.standard_b64decode(b["source"]["data"]))
+                    images.append(str(img))
+            prompt = "\n\n".join(texts)
+            if images:
+                prompt += ("\n\nImages, in order (open every one with the Read tool before answering):\n"
+                           + "\n".join(images))
+            prompt += f"\n\nReply only with the structured output: {description or tool_name}."
+
+            use_web = web_search and self.web_enabled
+            allowed = (["Read"] if images else []) + (["WebSearch", "WebFetch"] if use_web else [])
+            turns = 4 + len(images) + (self.max_searches + 2 if use_web else 0)
+            cmd = [self.bin, "-p", prompt, "--output-format", "json", "--json-schema", json.dumps(schema),
+                   "--model", self.fast_model if fast else self.model, "--system-prompt", system,
+                   "--max-turns", str(turns), "--disallowedTools", "Bash,Edit,Write,NotebookEdit"]
+            if allowed:
+                cmd += ["--allowedTools", ",".join(allowed)]
+            if images:
+                cmd += ["--add-dir", td]
+            p = self.runner(cmd, capture_output=True, text=True, timeout=self.timeout, cwd=td, env=os.environ.copy())
+        if p.returncode != 0 and not p.stdout.strip():
+            raise RuntimeError(f"claude -p failed ({p.returncode}): {p.stderr.strip()[-500:]}")
+        try:
+            data = json.loads(p.stdout.strip().splitlines()[-1])
+        except (json.JSONDecodeError, IndexError) as e:
+            raise RuntimeError(f"claude -p returned non-JSON output: {p.stdout[-300:]!r}") from e
+        if data.get("is_error") or data.get("subtype") not in (None, "success"):
+            raise RuntimeError(f"claude -p error ({data.get('subtype')}): {str(data.get('result', ''))[:500]}")
+        out = data.get("structured_output")
+        if out is None:  # older CLIs: schema-valid JSON arrives in `result`
+            try:
+                out = json.loads(data.get("result", ""))
+            except (TypeError, json.JSONDecodeError) as e:
+                raise RuntimeError("claude -p returned no structured_output") from e
+        if not isinstance(out, dict):
+            raise RuntimeError(f"claude -p structured_output is not an object: {type(out).__name__}")
+        return out
+
+
+def make_llm(cfg: dict[str, Any]):
+    """auto: ANTHROPIC_API_KEY -> API; else the Claude Code CLI (subscription token or local login)."""
+    backend = cfg["llm"].get("backend", "auto")
+    if backend == "api" or (backend == "auto" and os.environ.get("ANTHROPIC_API_KEY")):
+        log.info("brain: Claude API")
+        return LLM(cfg)
+    if backend in ("auto", "claude-cli"):
+        log.info("brain: Claude Code CLI (%s)", "subscription token" if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") else "local login")
+        return ClaudeCLI(cfg)
+    raise ValueError(f"unknown llm.backend {backend!r} (use auto, api or claude-cli)")
 
 
 class FakeLLM:

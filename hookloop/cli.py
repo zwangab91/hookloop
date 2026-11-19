@@ -98,7 +98,13 @@ def cmd_doctor(args) -> None:
     for b in ("ffmpeg", "ffprobe"):
         print(f"  {ok(shutil.which(b))}{b}")
     print("brain / research")
-    for k, why in [("ANTHROPIC_API_KEY", "Claude (required)"), ("HOOKLOOP_STATE_KEY", "encrypts rotated tokens in state DB"), ("APIFY_TOKEN", "TikTok + Instagram hashtag research"),
+    sub = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+    api = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    backend = cfg["llm"].get("backend", "auto")
+    brain = "Claude API" if backend == "api" or (backend == "auto" and api) else "Claude Code CLI / your subscription"
+    print(f"  brain: {brain}  (claude CLI {'found' if shutil.which('claude') else 'NOT found'}; "
+          f"subscription token {'set' if sub else 'not set'}; API key {'set' if api else 'not set'})")
+    for k, why in [("HOOKLOOP_STATE_KEY", "encrypts rotated tokens in state DB"), ("APIFY_TOKEN", "TikTok + Instagram hashtag research"),
                    ("YOUTUBE_API_KEY", "YouTube Shorts research"), ("OPENAI_API_KEY", "transcribing source hooks / openai TTS")]:
         print(f"  {ok(os.environ.get(k))}{k:20s} {why}")
     print(f"voice: {cfg['tts']['provider']}")

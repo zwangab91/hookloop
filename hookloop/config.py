@@ -64,6 +64,8 @@ DEFAULTS: dict[str, Any] = {
         "transcribe_model": "gpt-4o-transcribe",
     },
     "llm": {
+        "backend": "auto",  # auto | api (ANTHROPIC_API_KEY) | claude-cli (your subscription via `claude -p`)
+        "cli_timeout_s": 900,
         "model": "claude-sonnet-5-5",
         "fast_model": "claude-haiku-5-5",
         "web_search": True,

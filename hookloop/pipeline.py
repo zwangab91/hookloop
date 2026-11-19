@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from .llm import LLM, load_fake
+from .llm import load_fake, make_llm
 from .models import Script
 from .notify import notify
 from .providers.publishers import make_publishers
@@ -52,7 +52,7 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
     if publishers and not dry_run:
         growth.collect(cfg, store, publishers)
 
-    llm = load_fake(FIXTURES / "demo_llm.json") if offline else LLM(cfg)
+    llm = load_fake(FIXTURES / "demo_llm.json") if offline else make_llm(cfg)
 
     topic = pick_topic(cfg, store, llm)  # Step 1 (+6 rotation)
     winners = research(cfg, store, topic, fixture=FIXTURES / "demo_sources.json" if offline else None)  # Steps 2-3

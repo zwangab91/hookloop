@@ -45,7 +45,17 @@ publishing in dry-run mode. Everything else is the production code path.
 ## Go live
 
 1. `cp config.example.yaml config.yaml` and set `niche`, `handle`, and the topic pool.
-2. Get the keys in `.env.example`. Run `hookloop doctor` to see what's missing.
+2. Connect Claude, using **your Claude subscription** (no API billing):
+   ```bash
+   npm install -g @anthropic-ai/claude-code   # if you don't have Claude Code yet
+   claude setup-token                          # opens a browser, prints sk-ant-oat01-...
+   gh secret set CLAUDE_CODE_OAUTH_TOKEN -R <you>/hookloop   # paste the token
+   ```
+   hookloop then calls Claude through the official CLI (`claude -p --json-schema`). Anthropic only
+   allows subscription logins through its own apps, so the agent never uses the token directly.
+   Subscription usage from `claude -p` draws on your plan's monthly Agent SDK credit, not your chat limits.
+   Prefer pay-per-token? Set `ANTHROPIC_API_KEY` instead (it wins if both are set; `llm.backend` forces one).
+   Get the other keys in `.env.example`. Run `hookloop doctor` to see what's missing.
 3. Mint platform tokens once: `hookloop auth tiktok`, `hookloop auth youtube`, `hookloop auth instagram`.
 4. `hookloop keygen` → `HOOKLOOP_STATE_KEY` (encrypts rotated OAuth tokens in the committed state DB).
 5. `hookloop run --dry-run` locally, watch `output/<date>-<topic>/video.mp4`.

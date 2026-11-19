@@ -30,9 +30,10 @@ jobs:
       - id: keys
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::ANTHROPIC_API_KEY secret not set yet; skipping the daily run."; echo "ready=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ -n "$ANTHROPIC_API_KEY" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Neither CLAUDE_CODE_OAUTH_TOKEN (subscription) nor ANTHROPIC_API_KEY is set yet; skipping the daily run."; echo "ready=false" >> "$GITHUB_OUTPUT"; fi
 
   run:
     needs: check
@@ -40,7 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # your Claude subscription (from `claude setup-token`)
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}               # alternative: pay-per-token API (used first if set)
       HOOKLOOP_STATE_KEY: ${{ secrets.HOOKLOOP_STATE_KEY }}   # encrypts rotated OAuth tokens in the committed DB
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
@@ -69,6 +71,14 @@ jobs:
 
       - name: Install hookloop
         run: pip install -e ".[kokoro]"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code CLI (subscription brain)
+        if: ${{ env.ANTHROPIC_API_KEY == '' }}
+        run: npm install -g @anthropic-ai/claude-code && claude --version
 
       - name: Cache voice model
         uses: actions/cache@v4
