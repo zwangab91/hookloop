@@ -76,8 +76,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install Claude Code CLI (subscription brain)
-        if: ${{ env.ANTHROPIC_API_KEY == '' }}
+      - name: Install Claude Code CLI (used for the subscription backend)
         run: npm install -g @anthropic-ai/claude-code && claude --version
 
       - name: Cache voice model
