@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write            # to commit state/hookloop.db back (rotation, hook library, rotated tokens)
+  actions: read              # approve runs fetch the reviewed video from the run that rendered it
 
 concurrency:
   group: hookloop
@@ -85,11 +86,29 @@ jobs:
           path: ~/.cache/hookloop
           key: kokoro-v1.0
 
-      - name: Publish an approved post
+      - name: Fetch the video you approved
         if: ${{ github.event.inputs.approve != '' }}
-        run: hookloop -c config.yaml approve "${{ github.event.inputs.approve }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_ID: ${{ github.event.inputs.approve }}
+        run: |
+          [[ "$POST_ID" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+$ ]] || { echo "::error::'$POST_ID' is not a post id"; exit 1; }
+          AID=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=hookloop-$POST_ID" --jq '.artifacts[0].id // empty')
+          [ -n "$AID" ] || { echo "::error::no rendered video found for $POST_ID (artifacts expire after 30 days)"; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$AID/zip" > /tmp/post.zip
+          mkdir -p /tmp/post "output/$POST_ID" && unzip -o -q /tmp/post.zip -d /tmp/post
+          V=$(find /tmp/post -name video.mp4 | head -1); [ -n "$V" ] || { echo "::error::artifact has no video.mp4"; exit 1; }
+          cp "$V" "output/$POST_ID/video.mp4"
+          C=$(find /tmp/post -name cover.jpg | head -1); [ -z "$C" ] || cp "$C" "output/$POST_ID/cover.jpg"
+
+      - name: Publish the approved post
+        if: ${{ github.event.inputs.approve != '' }}
+        env:
+          POST_ID: ${{ github.event.inputs.approve }}
+        run: hookloop -c config.yaml approve "$POST_ID"
 
       - name: Daily loop
+        id: loop
         if: ${{ github.event.inputs.approve == '' }}
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
@@ -99,10 +118,10 @@ jobs:
           fi
 
       - name: Upload video
-        if: always()
+        if: ${{ always() && github.event.inputs.approve == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: hookloop-${{ github.run_id }}
+          name: hookloop-${{ steps.loop.outputs.post_id || github.run_id }}
           path: |
             output/**/video.mp4
             output/**/cover.jpg

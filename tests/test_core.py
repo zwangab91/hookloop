@@ -182,3 +182,66 @@ def test_placeholder_handle_blocks_publishing(cfg, tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.growth, "collect", lambda *a, **k: {})
     out = pipeline.run_daily(cfg)
     assert calls == [] and out["results"] == []
+
+
+def test_review_mode_then_approve_on_a_fresh_runner(cfg, tmp_path, monkeypatch):
+    """Day run renders + parks the post; a later 'approve' run (no output/ dir) publishes it."""
+    import argparse
+    from hookloop import cli, pipeline
+    from hookloop.models import PublishResult
+
+    posted = []
+
+    class Pub:
+        def configured(self):
+            return True
+
+        def publish(self, post):
+            assert post.video.exists()
+            posted.append(post)
+            return PublishResult("instagram", True, remote_id="m1", url="https://instagram.com/reel/x/")
+
+    cfg.update(state_dir=str(tmp_path / "state"), output_dir=str(tmp_path / "output"), handle="@realhandle")
+    cfg["publish"]["mode"] = "review"
+
+    def fake_render(s, c, t, d):
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "video.mp4").write_bytes(b"mp4")
+        return {"video": str(d / "video.mp4"), "duration": 31.0}
+
+    monkeypatch.setattr(pipeline, "make_publishers", lambda c, s: {"instagram": Pub()})
+    monkeypatch.setattr(pipeline, "make_llm", lambda c: pipeline.load_fake(pipeline.FIXTURES / "demo_llm.json"))
+    monkeypatch.setattr(pipeline, "research", lambda c, s, t, fixture=None: [])
+    monkeypatch.setattr(pipeline, "render_with_fit", fake_render)
+    monkeypatch.setattr(pipeline, "make_tts", lambda c: None)
+    monkeypatch.setattr(pipeline.growth, "collect", lambda *a, **k: {})
+    out, summ = tmp_path / "gh_out", tmp_path / "gh_summary.md"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summ))
+
+    s = pipeline.run_daily(cfg)
+    cli.ci_report(s)
+    assert s["status"] == "pending_review" and posted == []
+    pid = s["post_id"]
+    assert out.read_text() == f"post_id={pid}\n"
+    card = summ.read_text()
+    assert f"approve: `{pid}`" in card and f"hookloop-{pid}" in card and "Full script" in card
+
+    # fresh runner: rendered files are gone, only the committed state DB remains
+    import shutil
+    shutil.rmtree(tmp_path / "output")
+    monkeypatch.setattr(cli, "_cfg", lambda a: cfg)
+    monkeypatch.setattr(cli, "make_publishers", lambda c, s: {"instagram": Pub()})
+    with pytest.raises(FileNotFoundError):  # without the workflow's fetch step there is nothing to post
+        cli.cmd_approve(argparse.Namespace(post_id=pid, dry_run=False))
+    # the workflow's fetch step restores output/<post_id>/video.mp4 from the artifact
+    (tmp_path / "output" / pid).mkdir(parents=True)
+    (tmp_path / "output" / pid / "video.mp4").write_bytes(b"mp4")
+    monkeypatch.chdir(tmp_path)
+    cli.cmd_approve(argparse.Namespace(post_id=pid, dry_run=False))
+    assert len(posted) == 1 and "Published" in summ.read_text()
+    assert pipeline.open_store(cfg).get_post(pid)["status"] == "published"
+
+    cfg["handle"] = "@yourhandle"
+    with pytest.raises(SystemExit, match="placeholder"):
+        cli.cmd_approve(argparse.Namespace(post_id=pid, dry_run=False))

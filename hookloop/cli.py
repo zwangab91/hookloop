@@ -25,8 +25,37 @@ def _cfg(args) -> dict:
     return load_config(path)
 
 
+def ci_report(s: dict) -> None:
+    """On GitHub Actions: expose the post id to later steps and write a review card on the run page."""
+    if os.environ.get("GITHUB_OUTPUT") and s.get("post_id"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"post_id={s['post_id']}\n")
+    if not os.environ.get("GITHUB_STEP_SUMMARY"):
+        return
+    pid = s.get("post_id", "")
+    lines = [f"## {s.get('topic', '')} ({s.get('duration', '?')}s) — {s.get('status', '')}",
+             f"**Hook:** {s.get('hook', '')}", f"**Post id:** `{pid}`", ""]
+    script = Path(s.get("video", "")).parent / "script.json"
+    if script.exists():
+        d = json.loads(script.read_text())
+        lines += [f"**Caption:** {d.get('caption', '')} " + " ".join("#" + h for h in d.get("hashtags", [])), "",
+                  "<details><summary>Full script</summary>", ""]
+        lines += [f"{i + 1}. *({seg.get('style')})* {seg.get('voiceover')}" for i, seg in enumerate(d.get("segments", []))]
+        lines += ["", "</details>", ""]
+    if s.get("status") == "pending_review":
+        lines += [f"**Watch it:** download **hookloop-{pid}** under *Artifacts* at the bottom of this page.",
+                  f"**Publish it:** Actions → hookloop daily → Run workflow → approve: `{pid}`",
+                  "Not happy with it? Do nothing; tomorrow's run makes a new one."]
+    for r in s.get("results", []):
+        lines.append(f"- {r['platform']}: {'ok' if r['ok'] else 'FAILED'} {r.get('url') or r.get('status', '')} "
+                     f"{r.get('warning') or r.get('error') or ''}".rstrip())
+    with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def cmd_run(args) -> None:
     s = run_daily(_cfg(args), offline=args.offline, dry_run=args.dry_run)
+    ci_report(s)
     print(json.dumps(s, indent=2, default=str))
 
 
@@ -49,10 +78,18 @@ def cmd_render(args) -> None:
 
 def cmd_approve(args) -> None:
     cfg = _cfg(args)
+    if not args.dry_run and cfg.get("handle", "").strip() in ("", "@yourhandle"):
+        raise SystemExit("handle is still the placeholder '@yourhandle'; set `handle` in config.yaml before publishing")
     store = open_store(cfg)
     res = publish_post(store, args.post_id, make_publishers(cfg, store), dry_run=args.dry_run)
     for r in res:
         print(f"{r.platform:10s} {'ok' if r.ok else 'FAILED':6s} {r.url or r.status} {r.warning or r.error}")
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+            f.write(f"## Published `{args.post_id}`\n" + "".join(
+                f"- {r.platform}: {'ok' if r.ok else 'FAILED'} {r.url or r.status} {r.warning or r.error}\n" for r in res))
+    if res and not any(r.ok for r in res):
+        raise SystemExit("every platform failed; see the log above")
 
 
 def cmd_pending(args) -> None:

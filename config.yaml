@@ -48,7 +48,7 @@ render:
   theme: {accent: "#FF7A45", highlight: "#FFD54A"}
 
 publish:
-  mode: auto                                # auto = post immediately | review = wait for `hookloop approve <id>`
+  mode: review                              # review = wait for your approval (Actions → Run workflow → approve) | auto = post immediately
   platforms:
     tiktok:    {enabled: true, method: direct, privacy: PUBLIC_TO_EVERYONE}   # method: inbox = drafts, 1 tap to post
     instagram: {enabled: true, share_to_feed: true}
