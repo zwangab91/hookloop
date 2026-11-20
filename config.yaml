@@ -1,22 +1,30 @@
 # hookloop config: edit `handle` before going live. Secrets never go here (GitHub Actions secrets / .env).
 # Secrets never go here; they come from environment variables (see .env.example).
 
-niche: Claude                 # Step 1: the hot topic your channel is about
+niche: AI tools and AI engineering   # the area; topics are picked inside it every day
 handle: "@zitaowang1"           # TikTok + Instagram; shown on every video + the end card
 
 topics:
-  pool:                       # Step 6: rotated daily, never repeated inside rotation_days (refreshed 2026-11-19)
-    - Claude Code Code Mode
-    - Claude Fable 5.2
-    - Claude Skills
-    - Claude connectors (MCP)
-    - Claude Cowork
-    - Claude Design
-    - Claude Code Routines
-    - Claude in Excel and PowerPoint
-    - Weekend builds with Claude
-    - CLAUDE.md tips
-  discover_trending: true     # Claude web-searches what's hot today and may pick a new subtopic
+  mode: auto                  # auto: trend-first when view data exists (YouTube key / Apify), else Claude web search
+  scan_hashtags: [ai, aitools, chatgpt, claudeai, aiagents, machinelearning, cursorai, artificialintelligence]
+  trend_window_days: 14       # "trending" = 1M+ views on a video posted within this window
+  trend_min_videos: 3         # fewer than this -> fall back to the web-search pick
+  pool:                       # fallback candidates; rotated daily, never repeated inside rotation_days
+    - Claude Code
+    - ChatGPT
+    - Gemini
+    - Cursor
+    - AI agents
+    - MCP servers
+    - Context engineering
+    - RAG
+    - LLM evals
+    - Fine-tuning vs prompting
+    - Open-weight models
+    - How LLMs work
+    - Vibe coding
+    - AI for data analysis
+  discover_trending: true
   rotation_days: 7
 
 research:
@@ -33,10 +41,11 @@ llm:
 
 script:
   max_seconds: 45                           # Step 5: hard cap, enforced after TTS
-  cta: "Follow for a new Claude trick every day."
+  cta: "Follow for one practical AI tip a day."
   persona: >-
-    A practical builder who shows one concrete, copyable Claude trick per video.
-    Plain words, no hype, no filler, talks like a friend at a desk.
+    An ML engineer who has shipped AI systems at scale, explaining AI tools and how
+    they actually work in plain words. One concrete, copyable idea per video.
+    No hype, no filler, talks like a friend at a desk.
 
 tts:
   provider: kokoro                          # kokoro (free/local) | openai | elevenlabs (your cloned voice)

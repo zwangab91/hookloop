@@ -10,6 +10,8 @@ class Topic:
     hashtags: list[str]
     why_now: str = ""
     facts: list[dict[str, str]] = field(default_factory=list)  # [{fact, source_url}]
+    examples: list["SourceVideo"] = field(default_factory=list)  # 1M+ videos behind a trend-picked topic
+    method: str = "rotation"  # trend | web_search | rotation
 
 
 @dataclass

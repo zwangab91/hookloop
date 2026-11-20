@@ -19,7 +19,7 @@ learns from its own results.
 
 | # | Playbook step | What the agent does | Code |
 |---|---|---|---|
-| 1 | Pick a hot topic | Claude web-searches what's trending in your niche, picks one subtopic, returns hashtags + sourced facts | `steps/topic.py` |
+| 1 | Pick a hot topic | **Trend-first:** scans the area's broad hashtags for videos posted in the last 14 days with 1M+ views, has Claude group them into themes, and picks the strongest one not used in the last 7 days (plus sourced facts). With no view data it falls back to Claude web-searching what's hot in the area | `steps/topic.py` |
 | 2 | Search the topic's hashtag | TikTok + Instagram via Apify scrapers, YouTube Shorts via Data API | `steps/research.py`, `providers/sources.py` |
 | 3 | Watch videos with 1M+ views | Filters by views (default 1,000,000), recency, ≤90s; falls back to top-N if nothing clears the bar | `steps/research.py` |
 | 4 | Copy the first 10 seconds | Downloads only the first 10s, transcribes it, grabs 4 frames, and Claude (vision) abstracts the hook into a reusable template + beat structure | `steps/hooks.py` |
@@ -44,7 +44,7 @@ publishing in dry-run mode. Everything else is the production code path.
 
 ## Go live
 
-1. `cp config.example.yaml config.yaml` and set `niche`, `handle`, and the topic pool.
+1. `cp config.example.yaml config.yaml` and set `niche` (the area, e.g. "AI tools and AI engineering"), `handle`, and the scan hashtags / fallback topic pool.
 2. Connect Claude, using **your Claude subscription** (no API billing):
    ```bash
    npm install -g @anthropic-ai/claude-code   # if you don't have Claude Code yet

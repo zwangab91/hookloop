@@ -54,8 +54,13 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
 
     llm = load_fake(FIXTURES / "demo_llm.json") if offline else make_llm(cfg)
 
-    topic = pick_topic(cfg, store, llm)  # Step 1 (+6 rotation)
+    topic = pick_topic(cfg, store, llm, offline=offline)  # Step 1 (+6 rotation)
     winners = research(cfg, store, topic, fixture=FIXTURES / "demo_sources.json" if offline else None)  # Steps 2-3
+    seen = {w.key for w in winners}
+    extra = [v for v in topic.examples if v.key not in seen]  # the 1M+ videos that made this topic trend
+    if extra:
+        store.upsert_sources(extra, topic.name)
+        winners = sorted(winners + extra, key=lambda v: v.views, reverse=True)
     mine_hooks(cfg, store, llm, winners, topic, offline=offline)  # Step 4
     script = write_script(cfg, store, llm, topic)  # Step 5
 
@@ -69,6 +74,8 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
 
     summary: dict[str, Any] = {"post_id": post_id, "topic": topic.name, "video": r["video"], "duration": round(r["duration"], 1),
                                "hook": script.segments[0].voiceover, "hook_type": script.hook_type, "results": [],
+                               "topic_method": topic.method, "topic_why": topic.why_now,
+                               "trend_examples": [{"url": v.url, "views": v.views} for v in topic.examples[:5]],
                                "videos": r.get("videos", {})}
 
     mode = cfg["publish"]["mode"]

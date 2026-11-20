@@ -34,20 +34,24 @@ def demo_script() -> Script:
     return Script.from_dict(d)
 
 
-# ---------------- Step 1 + 6: topic rotation
+# ---------------- Step 1 + 6: topic selection and rotation
+def _vid(i, views=2_000_000, caption="AI agents demo"):
+    return SourceVideo("tiktok", str(i), f"https://tiktok.com/@a/video/{i}", views, caption=caption)
+
+
 def test_rotation_blocks_recent_topic_even_if_model_picks_it(cfg, store):
-    store.record_topic("Claude Code Code Mode", ["claudecode"])
-    llm = FakeLLM({"submit_topic": {"topic": "Claude Code Code Mode", "hashtags": ["x"], "why_now": "", "facts": []}})
-    t = pick_topic(cfg, store, llm)
-    assert t.name != "Claude Code Code Mode"
-    assert t.name == "Claude Fable 5.2"  # next fresh item in the pool
+    pool = cfg["topics"]["pool"]
+    store.record_topic(pool[0], ["x"])
+    llm = FakeLLM({"submit_topic": {"topic": pool[0], "hashtags": ["x"], "why_now": "", "facts": []}})
+    t = pick_topic(cfg, store, llm, scan=lambda c: [])
+    assert t.name == pool[1] and t.method == "rotation"  # next fresh item in the pool
 
 
-def test_topic_uses_model_choice_and_cleans_hashtags(cfg, store):
+def test_web_search_pick_cleans_hashtags(cfg, store):
     llm = FakeLLM({"submit_topic": {"topic": "Claude Skills", "hashtags": ["#ClaudeSkills", "claude ai"],
                                     "why_now": "hot", "facts": [{"fact": "f", "source_url": "u"}]}})
-    t = pick_topic(cfg, store, llm)
-    assert t.hashtags == ["claudeskills", "claudeai"]
+    t = pick_topic(cfg, store, llm, scan=lambda c: [])
+    assert t.hashtags == ["claudeskills", "claudeai"] and t.method == "web_search"
     assert store.recent_topics(7) == ["Claude Skills"]
 
 
@@ -58,6 +62,56 @@ def test_rotation_falls_back_to_least_recent_when_pool_exhausted(cfg, store):
     cfg["topics"]["rotation_days"] = 100000
     t = pick_topic(cfg, store, None)
     assert t.name == "B"
+
+
+def test_trend_first_picks_strongest_fresh_theme_with_its_examples(cfg, store):
+    store.record_topic("Cursor rules", [])  # strongest theme was used this week -> skip it
+    vids = [_vid(i) for i in range(5)]
+    llm = FakeLLM({
+        "submit_themes": {"themes": [
+            {"topic": "Cursor Rules", "hashtags": ["cursor"], "why_now": "3 videos", "video_keys": ["tiktok:0"]},
+            {"topic": "MCP in 60 seconds", "hashtags": ["#MCP", "aiagents"], "why_now": "2 videos at 2M+",
+             "video_keys": ["tiktok:1", "tiktok:2", "tiktok:999"]},
+        ]},
+        "submit_facts": {"facts": [{"fact": "MCP is an open protocol", "source_url": "https://modelcontextprotocol.io"}]},
+    })
+    t = pick_topic(cfg, store, llm, scan=lambda c: vids)
+    assert t.method == "trend" and t.name == "MCP in 60 seconds"
+    assert t.hashtags == ["mcp", "aiagents"]
+    assert [v.key for v in t.examples] == ["tiktok:1", "tiktok:2"]  # unknown keys dropped
+    assert t.facts and t.facts[0]["source_url"].startswith("https://")
+    assert [c["tool"] for c in llm.calls] == ["submit_themes", "submit_facts"]
+
+
+def test_trend_falls_back_to_web_search_when_too_little_data(cfg, store):
+    llm = FakeLLM({"submit_topic": {"topic": "RAG", "hashtags": ["rag"], "why_now": "", "facts": []}})
+    t = pick_topic(cfg, store, llm, scan=lambda c: [_vid(1)])  # 1 < trend_min_videos
+    assert t.method == "web_search" and t.name == "RAG"
+
+
+def test_trend_scan_skipped_offline_and_in_niche_mode(cfg, store):
+    def boom(c):
+        raise AssertionError("scan should not run")
+
+    llm = FakeLLM({"submit_topic": {"topic": "RAG", "hashtags": ["rag"], "why_now": "", "facts": []}})
+    assert pick_topic(cfg, store, llm, offline=True, scan=boom, record=False).method == "web_search"
+    cfg["topics"]["mode"] = "niche"
+    assert pick_topic(cfg, store, llm, scan=boom, record=False).method == "web_search"
+
+
+def test_scan_trends_uses_recent_window_and_strict_1m_bar(cfg, monkeypatch):
+    from hookloop.steps import topic as topic_mod
+    seen = {}
+
+    def fake_youtube(tags, c, max_tags=3):
+        seen["tags"], seen["max_tags"], seen["age"] = tags, max_tags, c["research"]["max_age_days"]
+        return [_vid(1, 3_000_000), _vid(2, 400_000)]
+
+    monkeypatch.setattr(topic_mod.sources, "youtube_search", fake_youtube)
+    monkeypatch.setattr(topic_mod.sources, "apify_search", lambda p, t, c: [])
+    out = topic_mod.scan_trends(cfg)
+    assert [v.video_id for v in out] == ["1"]  # 400K never counts as trending, even as a fallback
+    assert seen["age"] == cfg["topics"]["trend_window_days"] and seen["max_tags"] == len(seen["tags"])
 
 
 # ---------------- Steps 2-3: research

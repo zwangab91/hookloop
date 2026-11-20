@@ -14,25 +14,37 @@ from typing import Any
 import yaml
 
 DEFAULTS: dict[str, Any] = {
-    "niche": "Claude",
+    "niche": "AI tools and AI engineering",
     "handle": "@yourhandle",
     "state_dir": "state",
     "output_dir": "output",
     # Step 1 + 6: topic selection and daily rotation
     "topics": {
-        "pool": [  # refreshed 2026-11-19 from the live #claudeai TikTok feed + Anthropic news
-            "Claude Code Code Mode",
-            "Claude Fable 5.2",
-            "Claude Skills",
-            "Claude connectors (MCP)",
-            "Claude Cowork",
-            "Claude Design",
-            "Claude Code Routines",
-            "Claude in Excel and PowerPoint",
-            "Weekend builds with Claude",
-            "CLAUDE.md tips",
+        # auto: trend-first when research data is available, else Claude web-searches the area
+        # trend: always try the 1M+ trend scan first | niche: skip the scan
+        "mode": "auto",
+        "scan_hashtags": ["ai", "aitools", "chatgpt", "claudeai", "aiagents", "machinelearning", "cursorai",
+                          "artificialintelligence"],
+        "trend_window_days": 14,  # only videos posted this recently count as "trending"
+        "trend_min_videos": 3,  # fewer 1M+ videos than this in the window -> fall back to web search
+        "niche_hashtags": ["ai", "aitools", "artificialintelligence"],
+        "pool": [  # used by the fallback; Claude may also propose a trending subtopic inside the area
+            "Claude Code",
+            "ChatGPT",
+            "Gemini",
+            "Cursor",
+            "AI agents",
+            "MCP servers",
+            "Context engineering",
+            "RAG",
+            "LLM evals",
+            "Fine-tuning vs prompting",
+            "Open-weight models",
+            "How LLMs work",
+            "Vibe coding",
+            "AI for data analysis",
         ],
-        "discover_trending": True,  # let Claude web-search for what is hot this week
+        "discover_trending": True,  # fallback: let Claude web-search what is hot this week
         "rotation_days": 7,  # never repeat a topic inside this window
     },
     # Steps 2-4: research + hook mining
@@ -76,9 +88,9 @@ DEFAULTS: dict[str, Any] = {
     "script": {
         "max_seconds": 45,
         "words_per_second": 2.6,
-        "persona": "A practical builder who shows one concrete, copyable Claude trick per video. "
-        "Plain words, no hype, no filler, talks like a friend at a desk.",
-        "cta": "Follow for a new Claude trick every day.",
+        "persona": "An ML engineer who has shipped AI systems at scale, explaining AI tools and how they actually "
+        "work in plain words. One concrete, copyable idea per video. No hype, no filler, talks like a friend at a desk.",
+        "cta": "Follow for one practical AI tip a day.",
         "max_revisions": 2,
     },
     "tts": {

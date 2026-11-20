@@ -106,7 +106,8 @@ def _iso_duration(s: str) -> float:
     return float(d * 86400 + h * 3600 + mi * 60 + se)
 
 
-def youtube_search(hashtags: list[str], cfg: dict[str, Any], client: httpx.Client | None = None) -> list[SourceVideo]:
+def youtube_search(hashtags: list[str], cfg: dict[str, Any], client: httpx.Client | None = None,
+                   max_tags: int = 3) -> list[SourceVideo]:
     key = os.environ.get("YOUTUBE_API_KEY")
     if not key:
         log.warning("YOUTUBE_API_KEY not set; skipping YouTube Shorts research")
@@ -114,7 +115,7 @@ def youtube_search(hashtags: list[str], cfg: dict[str, Any], client: httpx.Clien
     c = client or httpx.Client(timeout=60)
     after = (datetime.now(timezone.utc) - timedelta(days=int(cfg["research"]["max_age_days"]))).strftime("%Y-%m-%dT%H:%M:%SZ")
     ids: list[str] = []
-    for tag in hashtags[:3]:  # search.list costs quota; the most specific tags are enough
+    for tag in hashtags[:max_tags]:  # search.list costs 100 quota units per call (10,000/day free)
         r = c.get(YT_SEARCH, params={
             "part": "snippet", "q": f"#{tag} #shorts", "type": "video", "videoDuration": "short",
             "order": "viewCount", "publishedAfter": after, "maxResults": cfg["research"]["youtube"]["max_results"], "key": key,
@@ -138,5 +139,5 @@ def youtube_search(hashtags: list[str], cfg: dict[str, Any], client: httpx.Clien
                 duration_s=_iso_duration(v.get("contentDetails", {}).get("duration", "")),
                 posted_at=v["snippet"].get("publishedAt", ""),
             ))
-    log.info("youtube: %d shorts for %s", len(out), hashtags[:3])
+    log.info("youtube: %d shorts for %s", len(out), hashtags[:max_tags])
     return out

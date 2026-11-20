@@ -34,7 +34,10 @@ def ci_report(s: dict) -> None:
         return
     pid = s.get("post_id", "")
     lines = [f"## {s.get('topic', '')} ({s.get('duration', '?')}s) — {s.get('status', '')}",
-             f"**Hook:** {s.get('hook', '')}", f"**Post id:** `{pid}`", ""]
+             f"**Hook:** {s.get('hook', '')}", f"**Post id:** `{pid}`",
+             f"**Why this topic** ({s.get('topic_method', '')}): {s.get('topic_why', '')}", ""]
+    if s.get("trend_examples"):
+        lines += ["1M+ videos behind it: " + ", ".join(f"[{e['views']:,}]({e['url']})" for e in s["trend_examples"]), ""]
     script = Path(s.get("video", "")).parent / "script.json"
     if script.exists():
         d = json.loads(script.read_text())
