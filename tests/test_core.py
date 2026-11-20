@@ -347,3 +347,20 @@ def test_tiktok_auth_reports_which_account(username, expect_warning, capsys):
     out = capsys.readouterr().out
     assert name == username
     assert ("!!" in out) is expect_warning
+
+
+def test_failed_run_does_not_burn_the_topic(cfg, tmp_path, monkeypatch):
+    from hookloop import pipeline
+    cfg.update(state_dir=str(tmp_path / "s"), output_dir=str(tmp_path / "o"))
+    monkeypatch.setattr(pipeline, "make_publishers", lambda c, s: {})
+    monkeypatch.setattr(pipeline, "make_llm", lambda c: pipeline.load_fake(pipeline.FIXTURES / "demo_llm.json"))
+    monkeypatch.setattr(pipeline, "research", lambda c, s, t, fixture=None: [])
+    monkeypatch.setattr(pipeline, "make_tts", lambda c: None)
+
+    def boom(*a, **k):
+        raise RuntimeError("render failed")
+
+    monkeypatch.setattr(pipeline, "render_with_fit", boom)
+    with pytest.raises(RuntimeError):
+        pipeline.run_daily(cfg)
+    assert pipeline.open_store(cfg).recent_topics(7) == []

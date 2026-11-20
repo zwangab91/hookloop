@@ -143,3 +143,17 @@ def test_cli_error_and_legacy_result(fake_claude, monkeypatch):
         cli.structured(system="s", content="c", tool_name="t", schema={"type": "object"})
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "legacy")
     assert cli.structured(system="s", content="c", tool_name="t", schema={"type": "object"}) == {"topic": "Claude Skills"}
+
+
+def test_cli_strips_whitespace_from_pasted_token(fake_claude, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-abc\ndef  \n")
+    ClaudeCLI(load_config()).structured(system="s", content="c", tool_name="t", schema={"type": "object"})
+    assert _json.loads(fake_claude.read_text())["token"] == "sk-ant-oat01-abcdef"
+
+
+def test_cli_auth_error_explains_the_fix(fake_claude, tmp_path, monkeypatch):
+    bad = tmp_path / "bin" / "claude"
+    bad.write_text("#!/usr/bin/env python3\nimport json\nprint(json.dumps({'type':'result','subtype':'success','is_error':True,"
+                   "'result':'Failed to authenticate. API Error: 401 OAuth access token is invalid.'}))\n")
+    with _pytest.raises(RuntimeError, match="claude setup-token"):
+        ClaudeCLI(load_config()).structured(system="s", content="c", tool_name="t", schema={"type": "object"})

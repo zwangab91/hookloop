@@ -138,7 +138,10 @@ class ClaudeCLI:
                 cmd += ["--allowedTools", ",".join(allowed)]
             if images:
                 cmd += ["--add-dir", td]
-            p = self.runner(cmd, capture_output=True, text=True, timeout=self.timeout, cwd=td, env=os.environ.copy())
+            env = os.environ.copy()
+            if env.get("CLAUDE_CODE_OAUTH_TOKEN"):  # tokens never contain whitespace; copy-paste from a wrapped
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = "".join(env["CLAUDE_CODE_OAUTH_TOKEN"].split())  # terminal adds it
+            p = self.runner(cmd, capture_output=True, text=True, timeout=self.timeout, cwd=td, env=env)
         if p.returncode != 0 and not p.stdout.strip():
             raise RuntimeError(f"claude -p failed ({p.returncode}): {p.stderr.strip()[-500:]}")
         try:
@@ -146,7 +149,12 @@ class ClaudeCLI:
         except (json.JSONDecodeError, IndexError) as e:
             raise RuntimeError(f"claude -p returned non-JSON output: {p.stdout[-300:]!r}") from e
         if data.get("is_error") or data.get("subtype") not in (None, "success"):
-            raise RuntimeError(f"claude -p error ({data.get('subtype')}): {str(data.get('result', ''))[:500]}")
+            msg = str(data.get("result", ""))[:500]
+            if "401" in msg or "authenticate" in msg.lower():
+                raise RuntimeError(f"Claude rejected the login ({msg}). The CLAUDE_CODE_OAUTH_TOKEN secret is invalid, "
+                                   "expired or revoked: run `claude setup-token` and save the new token with "
+                                   "`gh secret set CLAUDE_CODE_OAUTH_TOKEN -R <owner>/hookloop`.")
+            raise RuntimeError(f"claude -p error ({data.get('subtype')}): {msg}")
         out = data.get("structured_output")
         if out is None:  # older CLIs: schema-valid JSON arrives in `result`
             try:

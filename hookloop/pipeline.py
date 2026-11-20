@@ -54,7 +54,7 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
 
     llm = load_fake(FIXTURES / "demo_llm.json") if offline else make_llm(cfg)
 
-    topic = pick_topic(cfg, store, llm, offline=offline)  # Step 1 (+6 rotation)
+    topic = pick_topic(cfg, store, llm, offline=offline, record=False)  # Step 1 (+6 rotation)
     winners = research(cfg, store, topic, fixture=FIXTURES / "demo_sources.json" if offline else None)  # Steps 2-3
     seen = {w.key for w in winners}
     extra = [v for v in topic.examples if v.key not in seen]  # the 1M+ videos that made this topic trend
@@ -71,6 +71,7 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
     (out_dir / "script.json").write_text(json.dumps(script.to_dict(), indent=2))
     (out_dir / "caption.txt").write_text(script.caption + "\n\n" + " ".join(f"#{h}" for h in script.hashtags))
     store.create_post(post_id, topic.name, script.hook_id, script.hook_type, script.to_dict(), r["video"], "rendered")
+    store.record_topic(topic.name, topic.hashtags, topic.why_now)  # only now: a failed run must not burn a topic
 
     summary: dict[str, Any] = {"post_id": post_id, "topic": topic.name, "video": r["video"], "duration": round(r["duration"], 1),
                                "hook": script.segments[0].voiceover, "hook_type": script.hook_type, "results": [],
