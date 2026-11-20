@@ -68,7 +68,8 @@ def run_daily(cfg: dict[str, Any], *, offline: bool = False, dry_run: bool = Fal
     store.create_post(post_id, topic.name, script.hook_id, script.hook_type, script.to_dict(), r["video"], "rendered")
 
     summary: dict[str, Any] = {"post_id": post_id, "topic": topic.name, "video": r["video"], "duration": round(r["duration"], 1),
-                               "hook": script.segments[0].voiceover, "hook_type": script.hook_type, "results": []}
+                               "hook": script.segments[0].voiceover, "hook_type": script.hook_type, "results": [],
+                               "videos": r.get("videos", {})}
 
     mode = cfg["publish"]["mode"]
     if mode == "review" and not dry_run:

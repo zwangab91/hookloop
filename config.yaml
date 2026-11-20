@@ -2,7 +2,7 @@
 # Secrets never go here; they come from environment variables (see .env.example).
 
 niche: Claude                 # Step 1: the hot topic your channel is about
-handle: "@yourhandle"         # shown on every video + the end card
+handle: "@zitaowang1"           # TikTok + Instagram; shown on every video + the end card
 
 topics:
   pool:                       # Step 6: rotated daily, never repeated inside rotation_days (refreshed 2026-11-19)
@@ -52,7 +52,7 @@ publish:
   platforms:
     tiktok:    {enabled: true, method: direct, privacy: PUBLIC_TO_EVERYONE}   # method: inbox = drafts, 1 tap to post
     instagram: {enabled: true, share_to_feed: true}
-    youtube:   {enabled: true, privacy: public}
+    youtube:   {enabled: true, privacy: public, handle: "@ZitaoWang"}  # gets its own copy: @ZitaoWang + SUBSCRIBE
     webhook:   {enabled: false}             # fan out to X/LinkedIn/Threads via n8n or Make
 
 growth:

@@ -245,3 +245,51 @@ def test_review_mode_then_approve_on_a_fresh_runner(cfg, tmp_path, monkeypatch):
     cfg["handle"] = "@yourhandle"
     with pytest.raises(SystemExit, match="placeholder"):
         cli.cmd_approve(argparse.Namespace(post_id=pid, dry_run=False))
+
+
+def test_video_variants_per_platform_handle_and_button(cfg):
+    from hookloop.steps.render import video_variants
+    cfg["handle"] = "@zitaowang1"
+    cfg["publish"]["platforms"]["youtube"]["handle"] = "@ZitaoWang"
+    v = video_variants(cfg)
+    assert v == {"youtube": ("@ZitaoWang", "SUBSCRIBE")}  # TikTok/Instagram share the default copy
+    cfg["publish"]["platforms"]["youtube"]["enabled"] = False
+    assert video_variants(cfg) == {}
+
+
+def test_publish_uses_each_platforms_own_copy(cfg, store, tmp_path):
+    from hookloop.models import PublishResult
+    from hookloop.steps.publish import publish_post
+    d = tmp_path / "out" / "p1"
+    d.mkdir(parents=True)
+    (d / "video.mp4").write_bytes(b"default")
+    (d / "video_youtube.mp4").write_bytes(b"youtube")
+    script = json.loads(DEMO.read_text())["submit_script"]
+    store.create_post("p1", "t", None, "x", script, str(d / "video.mp4"), "pending_review")
+    seen = {}
+
+    class Pub:
+        def __init__(self, name):
+            self.name = name
+
+        def publish(self, post):
+            seen[self.name] = post.video.read_bytes()
+            return PublishResult(self.name, True, remote_id="1")
+
+    publish_post(store, "p1", {n: Pub(n) for n in ("tiktok", "instagram", "youtube")})
+    assert seen == {"tiktok": b"default", "instagram": b"default", "youtube": b"youtube"}
+
+
+@pytest.mark.parametrize("username,expect_warning", [("zitaowang1", False), ("someoneelse", True)])
+def test_tiktok_auth_reports_which_account(username, expect_warning, capsys):
+    import httpx
+    from hookloop.auth import check_tiktok_account
+
+    def handler(req):
+        assert req.headers["Authorization"] == "Bearer at"
+        return httpx.Response(200, json={"data": {"user": {"username": username, "display_name": "Zitao"}}})
+
+    name = check_tiktok_account("at", "@zitaowang1", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    out = capsys.readouterr().out
+    assert name == username
+    assert ("!!" in out) is expect_warning

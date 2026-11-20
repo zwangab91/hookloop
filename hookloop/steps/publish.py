@@ -13,10 +13,14 @@ from ..store import Store
 log = logging.getLogger("hookloop.publish")
 
 
-def build_post(row: dict[str, Any]) -> Post:
+def build_post(row: dict[str, Any], platform: str | None = None) -> Post:
+    """Use output/<id>/video_<platform>.mp4 when that platform got its own copy (different handle/button)."""
     s = Script.from_dict(json.loads(row["script"]))
     video = Path(row["video_path"])
     cover = video.parent / "cover.jpg"
+    if platform and (video.parent / f"video_{platform}.mp4").exists():
+        video = video.parent / f"video_{platform}.mp4"
+        cover = video.parent / f"cover_{platform}.jpg"
     return Post(video=video, title=s.title, caption=s.caption, hashtags=s.hashtags, cover=cover if cover.exists() else None)
 
 
@@ -33,6 +37,7 @@ def publish_post(store: Store, post_id: str, publishers: dict[str, Publisher], *
         if name in done:
             log.info("%s: already published, skipping", name)
             continue
+        post = build_post(row, name)
         if dry_run:
             log.info("[dry-run] would publish to %s: %r", name, post.caption_with_tags()[:120])
             results.append(PublishResult(platform=name, ok=True, status="DRY_RUN"))

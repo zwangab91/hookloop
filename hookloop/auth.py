@@ -17,7 +17,7 @@ import httpx
 
 from .store import Store
 
-TIKTOK_SCOPES = "user.info.basic,user.info.stats,video.list,video.publish,video.upload"
+TIKTOK_SCOPES = "user.info.basic,user.info.profile,user.info.stats,video.list,video.publish,video.upload"
 YT_SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
 
 
@@ -29,7 +29,7 @@ def _code_from(url_or_code: str) -> str:
     return s
 
 
-def tiktok(store: Store) -> None:
+def tiktok(store: Store, expected_handle: str = "") -> None:
     key, secret = os.environ["TIKTOK_CLIENT_KEY"], os.environ["TIKTOK_CLIENT_SECRET"]
     redirect = os.environ.get("TIKTOK_REDIRECT_URI") or input("Redirect URI registered in your TikTok app (https://...): ").strip()
     state = secrets.token_urlsafe(16)
@@ -44,7 +44,28 @@ def tiktok(store: Store) -> None:
     if "refresh_token" not in j:
         raise SystemExit(f"TikTok token exchange failed: {j}")
     store.secret_set("tiktok_refresh_token", j["refresh_token"])
+    who = check_tiktok_account(j["access_token"], expected_handle)
+    if who:
+        store.kv_set("tiktok_username", who)
     print(f"\nTIKTOK_REFRESH_TOKEN={j['refresh_token']}\n(Saved to state DB; add it as a GitHub Actions secret too.)")
+
+
+def check_tiktok_account(access_token: str, expected_handle: str = "", client: httpx.Client | None = None) -> str:
+    """Print which TikTok account the token belongs to; warn if it isn't the configured handle."""
+    c = client or httpx.Client(timeout=30)
+    r = c.get("https://open.tiktokapis.com/v2/user/info/", params={"fields": "username,display_name"},
+              headers={"Authorization": f"Bearer {access_token}"})
+    u = (r.json().get("data") or {}).get("user") or {}
+    name = u.get("username", "")
+    if not name:
+        print(f"\n!! Could not read the TikTok username ({r.json().get('error', {})}). Check the account in the TikTok app.")
+        return ""
+    want = expected_handle.lstrip("@").lower()
+    if want and name.lower() != want:
+        print(f"\n!! You authorized @{name}, but config.yaml expects @{want}. Re-run this with the right TikTok account.")
+    else:
+        print(f"\nConnected TikTok account: @{name} ({u.get('display_name', '')})")
+    return name
 
 
 def youtube(store: Store, port: int = 8765) -> None:

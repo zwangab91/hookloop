@@ -42,6 +42,8 @@ def ci_report(s: dict) -> None:
                   "<details><summary>Full script</summary>", ""]
         lines += [f"{i + 1}. *({seg.get('style')})* {seg.get('voiceover')}" for i, seg in enumerate(d.get("segments", []))]
         lines += ["", "</details>", ""]
+    if s.get("videos"):
+        lines += ["Separate copies (different handle / end-card button): " + ", ".join(sorted(s["videos"])), ""]
     if s.get("status") == "pending_review":
         lines += [f"**Watch it:** download **hookloop-{pid}** under *Artifacts* at the bottom of this page.",
                   f"**Publish it:** Actions → hookloop daily → Run workflow → approve: `{pid}`",
@@ -120,7 +122,7 @@ def cmd_mediakit(args) -> None:
 def cmd_auth(args) -> None:
     cfg = _cfg(args)
     if args.platform == "tiktok":
-        auth.tiktok(open_store(cfg))
+        auth.tiktok(open_store(cfg), cfg["publish"]["platforms"]["tiktok"].get("handle") or cfg.get("handle", ""))
     elif args.platform == "youtube":
         auth.youtube(open_store(cfg))
     else:

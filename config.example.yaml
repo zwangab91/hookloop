@@ -52,7 +52,7 @@ publish:
   platforms:
     tiktok:    {enabled: true, method: direct, privacy: PUBLIC_TO_EVERYONE}   # method: inbox = drafts, 1 tap to post
     instagram: {enabled: true, share_to_feed: true}
-    youtube:   {enabled: true, privacy: public}
+    youtube:   {enabled: true, privacy: public}   # add handle: "@..." if it differs; YouTube gets a SUBSCRIBE end card
     webhook:   {enabled: false}             # fan out to X/LinkedIn/Threads via n8n or Make
 
 growth:

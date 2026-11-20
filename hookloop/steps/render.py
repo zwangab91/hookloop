@@ -231,10 +231,10 @@ def draw_chrome(layer: Image.Image, progress: float, handle: str, fonts: Fonts, 
         d.text((CX - f.getlength(handle) / 2, 1440), handle, font=f, fill=(255, 255, 255, 150))
 
 
-def draw_cta(layer: Image.Image, text: str, handle: str, fonts: Fonts, theme: dict[str, str]) -> None:
+def draw_cta(layer: Image.Image, text: str, handle: str, fonts: Fonts, theme: dict[str, str],
+             label: str = "+ FOLLOW") -> None:
     y = draw_headline(layer, text, fonts, theme, top=460, start=96)
     f = fonts.get("heavy", 76)
-    label = "+ FOLLOW"
     w = f.getlength(label) + 120
     d = ImageDraw.Draw(layer)
     top = y + 80
@@ -283,9 +283,31 @@ def word_events(script: Script, spans: list[tuple[float, float]], total: float) 
 
 
 # ---------------------------------------------------------------- main
-def render_layer(script: Script, e: dict[str, Any], total: float, fonts: Fonts, cfg: dict[str, Any]) -> Image.Image:
+DEFAULT_LABEL = "+ FOLLOW"
+PLATFORM_LABELS = {"youtube": "SUBSCRIBE"}
+
+
+def video_variants(cfg: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """Platforms that need their own copy because the on-screen handle or end-card button differs.
+
+    Handle per platform: publish.platforms.<p>.handle (falls back to the top-level `handle`).
+    Button: publish.platforms.<p>.follow_label, else SUBSCRIBE on YouTube, + FOLLOW elsewhere.
+    """
+    default = (cfg.get("handle", ""), DEFAULT_LABEL)
+    out: dict[str, tuple[str, str]] = {}
+    for name, c in cfg["publish"]["platforms"].items():
+        if not c.get("enabled") or name == "webhook":
+            continue
+        v = (c.get("handle") or default[0], c.get("follow_label") or PLATFORM_LABELS.get(name, DEFAULT_LABEL))
+        if v != default:
+            out[name] = v
+    return out
+
+
+def render_layer(script: Script, e: dict[str, Any], total: float, fonts: Fonts, cfg: dict[str, Any],
+                 handle: str | None = None, label: str = DEFAULT_LABEL) -> Image.Image:
     theme = cfg["render"]["theme"]
-    handle = cfg.get("handle", "")
+    handle = cfg.get("handle", "") if handle is None else handle
     layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     seg = script.segments[e["seg"]]
     if seg.style == "hook":
@@ -297,7 +319,7 @@ def render_layer(script: Script, e: dict[str, Any], total: float, fonts: Fonts, 
         y = draw_headline(layer, seg.on_screen, fonts, theme, top=top, start=72)
         draw_code_card(layer, seg.code, fonts, theme, top=y + 40)
     elif seg.style == "cta":
-        draw_cta(layer, seg.on_screen, handle, fonts, theme)
+        draw_cta(layer, seg.on_screen, handle, fonts, theme, label)
     else:
         draw_headline(layer, seg.on_screen, fonts, theme, top=int(ZONE_MID - headline_height(seg.on_screen, fonts) / 2))
     if seg.style != "cta":
@@ -306,44 +328,32 @@ def render_layer(script: Script, e: dict[str, Any], total: float, fonts: Fonts, 
     return layer
 
 
-def render(script: Script, cfg: dict[str, Any], tts, out_dir: Path) -> dict[str, Any]:
+def _compose(script: Script, events: list[dict[str, Any]], total: float, fonts: Fonts, cfg: dict[str, Any],
+             bg: Image.Image, bg_path: Path, voice: Path, out_dir: Path, work: Path, handle: str, label: str,
+             suffix: str) -> tuple[Path, Path]:
+    """Draw the text layers for one handle/button variant and encode it over the shared voice + background."""
     rc = cfg["render"]
-    out_dir.mkdir(parents=True, exist_ok=True)
-    work = out_dir / "work"
-    work.mkdir(exist_ok=True)
-    fc = rc["fonts"]
-    fonts = Fonts(resolve_font("heavy", fc.get("heavy", "")), resolve_font("bold", fc.get("bold", "")),
-                  resolve_font("mono", fc.get("mono", "")))
-
-    voice, spans, total = voice_track(
-        tts, [s.voiceover for s in script.segments], work,
-        gap_s=float(cfg["tts"]["gap_s"]), max_seconds=float(cfg["script"]["max_seconds"]),
-    )
-    events = word_events(script, spans, total)
-
-    bg = background(rc["theme"])
-    bg_path = work / "bg.png"
-    bg.convert("RGB").save(bg_path)
-
+    lw = work / f"layers{suffix or '_default'}"
+    lw.mkdir(exist_ok=True)
     listing = []
     cover = None
     for i, e in enumerate(events):
-        layer = render_layer(script, e, total, fonts, cfg)
-        p = work / f"layer_{i:04d}.png"
+        layer = render_layer(script, e, total, fonts, cfg, handle, label)
+        p = lw / f"layer_{i:04d}.png"
         layer.save(p, compress_level=1)
         if i == 0:
             cover = Image.alpha_composite(bg, layer).convert("RGB")
         listing.append(f"file '{p.resolve()}'\nduration {max(e['end'] - e['start'], 0.001):.4f}")
-    listing.append(f"file '{(work / f'layer_{len(events) - 1:04d}.png').resolve()}'")
-    lst = work / "layers.txt"
+    listing.append(f"file '{(lw / f'layer_{len(events) - 1:04d}.png').resolve()}'")
+    lst = lw / "layers.txt"
     lst.write_text("\n".join(listing) + "\n")
-    cover_path = out_dir / "cover.jpg"
+    cover_path = out_dir / f"cover{suffix}.jpg"
     if cover:
         cover.save(cover_path, quality=90)
 
     fps = int(rc["fps"])
     n = int(total * fps) + fps
-    video = out_dir / "video.mp4"
+    video = out_dir / f"video{suffix}.mp4"
     cmd = ["ffmpeg", "-y", "-loglevel", "error"]
     if rc.get("ken_burns", True):
         cmd += ["-i", str(bg_path)]
@@ -366,5 +376,35 @@ def render(script: Script, cfg: dict[str, Any], tts, out_dir: Path) -> dict[str,
             "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-movflags", "+faststart", str(video)]
     run(cmd, timeout=900)
     log.info("rendered %s (%.1fs, %d caption events)", video, total, len(events))
+    return video, cover_path
+
+
+def render(script: Script, cfg: dict[str, Any], tts, out_dir: Path) -> dict[str, Any]:
+    rc = cfg["render"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    work = out_dir / "work"
+    work.mkdir(exist_ok=True)
+    fc = rc["fonts"]
+    fonts = Fonts(resolve_font("heavy", fc.get("heavy", "")), resolve_font("bold", fc.get("bold", "")),
+                  resolve_font("mono", fc.get("mono", "")))
+
+    voice, spans, total = voice_track(
+        tts, [s.voiceover for s in script.segments], work,
+        gap_s=float(cfg["tts"]["gap_s"]), max_seconds=float(cfg["script"]["max_seconds"]),
+    )
+    events = word_events(script, spans, total)
+
+    bg = background(rc["theme"])
+    bg_path = work / "bg.png"
+    bg.convert("RGB").save(bg_path)
+
+    video, cover_path = _compose(script, events, total, fonts, cfg, bg, bg_path, voice, out_dir, work,
+                                 cfg.get("handle", ""), DEFAULT_LABEL, suffix="")
+    videos = {}
+    for platform, (handle, label) in video_variants(cfg).items():
+        v, _ = _compose(script, events, total, fonts, cfg, bg, bg_path, voice, out_dir, work, handle, label,
+                        suffix=f"_{platform}")
+        videos[platform] = str(v)
+        log.info("rendered %s copy with %s / %s", platform, handle, label)
     return {"video": str(video), "cover": str(cover_path), "duration": total,
-            "spans": spans, "events": len(events)}
+            "spans": spans, "events": len(events), "videos": videos}

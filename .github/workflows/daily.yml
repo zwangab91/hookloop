@@ -97,9 +97,9 @@ jobs:
           [ -n "$AID" ] || { echo "::error::no rendered video found for $POST_ID (artifacts expire after 30 days)"; exit 1; }
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$AID/zip" > /tmp/post.zip
           mkdir -p /tmp/post "output/$POST_ID" && unzip -o -q /tmp/post.zip -d /tmp/post
-          V=$(find /tmp/post -name video.mp4 | head -1); [ -n "$V" ] || { echo "::error::artifact has no video.mp4"; exit 1; }
-          cp "$V" "output/$POST_ID/video.mp4"
-          C=$(find /tmp/post -name cover.jpg | head -1); [ -z "$C" ] || cp "$C" "output/$POST_ID/cover.jpg"
+          find /tmp/post \( -name 'video*.mp4' -o -name 'cover*.jpg' \) -exec cp {} "output/$POST_ID/" \;
+          [ -f "output/$POST_ID/video.mp4" ] || { echo "::error::artifact has no video.mp4"; exit 1; }
+          ls -la "output/$POST_ID"
 
       - name: Publish the approved post
         if: ${{ github.event.inputs.approve != '' }}
@@ -123,8 +123,8 @@ jobs:
         with:
           name: hookloop-${{ steps.loop.outputs.post_id || github.run_id }}
           path: |
-            output/**/video.mp4
-            output/**/cover.jpg
+            output/**/video*.mp4
+            output/**/cover*.jpg
             output/**/script.json
             output/**/summary.json
             output/media_kit.md
